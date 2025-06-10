@@ -22,9 +22,14 @@ EmpowerLex is a legal empowerment platform that helps users navigate the legal s
 
 ```
 empower_lex/
-├── empower_lex_mobile/     # Flutter mobile app
-├── empower_lex_backend/    # FastAPI backend
-└── docs/                   # Documentation
+├── app/                    # FastAPI backend
+│   ├── api/               # API endpoints
+│   ├── models/            # Database models
+│   ├── routes/            # Route handlers
+│   ├── services/          # Business logic
+│   └── utils/             # Utility functions
+├── empower_lex_mobile/    # Flutter mobile app
+└── docs/                  # Documentation
 ```
 
 ## Getting Started
@@ -46,7 +51,7 @@ empower_lex/
 
 2. Set up the backend:
    ```bash
-   cd empowerLex_backend
+   cd app
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    pip install -r requirements.txt
@@ -58,23 +63,19 @@ empower_lex/
    flutter pub get
    ```
 
-4. Configure the application:
-   - Copy `.env.example` to `.env`
-   - Update the values in `.env` with your sensitive data:
+4. Configure API Keys:
+   - Create a `.env` file in the root directory
+   - Add your API keys:
      ```bash
-     # Example .env file
-     DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-     JWT_SECRET_KEY=your-secret-key-here
-     OPENAI_API_KEY=your-openai-api-key
-     SMTP_USERNAME=your-email@gmail.com
-     SMTP_PASSWORD=your-app-specific-password
+     GEMINI_API_KEY=your_gemini_api_key_here
+     OPENAI_API_KEY=your_openai_api_key_here
      ```
 
 ### Running the Application
 
 1. Start the backend server:
    ```bash
-   cd empowerLex_backend
+   cd app
    uvicorn main:app --reload
    ```
 
@@ -87,7 +88,7 @@ empower_lex/
 ## Deployment
 
 ### Backend Deployment
-1. Set up your production environment variables in `.env`
+1. Set up your API keys in the production environment
 2. Configure your database connection
 3. Set up SSL/TLS certificates
 4. Configure your web server (Nginx/Apache)
