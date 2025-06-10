@@ -1,0 +1,29 @@
+Classify the following legal issue and provide relevant Indian laws:
+
+Issue: {title}
+Description: {description}
+Location: {location}
+
+Analyze this case and provide:
+
+1. Primary legal category (e.g., Consumer Protection, Labour Law, Criminal Law, Civil Law, Family Law, Property Law, etc.)
+
+2. Relevant Indian laws and acts with specific sections:
+   - The Consumer Protection Act, 2019
+   - Indian Contract Act, 1872
+   - Industrial Disputes Act, 1947
+   - Indian Penal Code, 1860
+   - Code of Civil Procedure, 1908
+   - Hindu Marriage Act, 1955
+   - Transfer of Property Act, 1882
+   - Information Technology Act, 2000
+   - Motor Vehicle Act, 1988
+   - etc.
+
+3. Specific sections that apply to this case
+
+4. Jurisdiction (which court/forum would handle this case)
+
+5. Time limitations (limitation period for filing)
+
+Provide your response in a structured format focusing on Indian legal framework.

@@ -1,0 +1,45 @@
+Generate a formal legal complaint draft based on the following information:
+
+Title: {title}
+Description: {description}
+Category: {category}
+User Location: {location}
+Applicable Laws: {laws}
+
+Format the complaint as follows:
+
+IN THE COURT OF [APPROPRIATE JURISDICTION]
+
+COMPLAINT UNDER [RELEVANT ACTS/SECTIONS]
+
+Between:
+[Complainant Name]
+[Address]
+...Complainant
+
+AND
+
+[Respondent/Defendant]
+[Address if known]
+...Respondent/Defendant
+
+MOST RESPECTFULLY SHOWETH:
+
+1. [Introduction and parties]
+2. [Facts of the case]
+3. [Legal grounds and violations]
+4. [Relief sought]
+5. [Prayer]
+
+WHEREFORE, the Complainant most respectfully prays that this Hon'ble Court may be pleased to:
+a) [Specific relief 1]
+b) [Specific relief 2]
+c) Grant any other relief deemed fit and proper in the circumstances of the case.
+
+Date: [DATE]
+Place: [PLACE]
+
+                                                    [Complainant Signature]
+                                                    Complainant
+
+Ensure the draft is professional, follows Indian legal format, and includes relevant legal citations.
