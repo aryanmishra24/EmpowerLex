@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/case_provider.dart';
@@ -6,6 +7,7 @@ import '../widgets/feedback_card.dart';
 import '../services/document_service.dart';
 import 'feedback_screen.dart';
 import 'next_steps_screen.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class CaseDetailScreen extends StatefulWidget {
   final String id;
@@ -20,10 +22,30 @@ class CaseDetailScreen extends StatefulWidget {
 }
 
 class _CaseDetailScreenState extends State<CaseDetailScreen> {
+  // Helper to extract main draft and legal analysis
+  Map<String, String> extractDraftAndAnalysis(String draft) {
+    try {
+      final analysisMap = json.decode(draft);
+      if (analysisMap is Map && analysisMap.containsKey('analysis')) {
+        String analysis = analysisMap['analysis'].replaceAll(r'\n', '\n');
+        // If you have a separate draft content, extract it here. Otherwise, show nothing or a placeholder.
+        return {
+          'draft': '', // or analysisMap['draft'] if available
+          'analysis': analysis,
+        };
+      }
+    } catch (_) {}
+    // Fallback: treat the whole thing as draft, no separate analysis
+    return {
+      'draft': draft.replaceAll(r'\n', '\n'),
+      'analysis': '',
+    };
+  }
+
   @override
   void initState() {
     super.initState();
-    print('CaseDetailScreen: initState called for case ${widget.id}');
+    print('CaseDetailScreen: initState called for case  ${widget.id}');
     Future.microtask(() {
       print('CaseDetailScreen: Loading case ${widget.id}');
       context.read<CaseProvider>().loadCase(widget.id);
@@ -257,7 +279,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             ),
                           ),
                           SizedBox(height: 8),
-                          Text(case_.description),
+                          MarkdownBody(data: case_.description),
                         ],
                       ),
                     ),
@@ -272,14 +294,14 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Legal Draft',
-                            style: TextStyle(
+                            children: [
+                              Text(
+                                'Legal Draft',
+                                style: TextStyle(
                                   fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               ElevatedButton.icon(
                                 onPressed: () async {
                                   try {
@@ -309,13 +331,24 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                           ),
                           SizedBox(height: 8),
                           if (case_.generatedDraft.isNotEmpty) ...[
-                          Container(
-                              padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(case_.generatedDraft),
+                            Builder(
+                              builder: (context) {
+                                final draftAndAnalysis = extractDraftAndAnalysis(case_.generatedDraft);
+                                final draftContent = draftAndAnalysis['draft'] ?? '';
+                                final analysis = draftAndAnalysis['analysis'] ?? '';
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (draftContent.isNotEmpty)
+                                      MarkdownBody(data: draftContent),
+                                    if (analysis.isNotEmpty) ...[
+                                      SizedBox(height: 16),
+                                      Text('LEGAL ANALYSIS:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      MarkdownBody(data: analysis),
+                                    ],
+                                  ],
+                                );
+                              },
                             ),
                           ],
                         ],
@@ -339,7 +372,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),
-                            ),
+                              ),
                               ElevatedButton.icon(
                                 onPressed: () {
                                   Navigator.push(
@@ -377,7 +410,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                                   leading: CircleAvatar(
                                     child: Text('${index + 1}'),
                                   ),
-                                  title: Text(case_.nextSteps[index]),
+                                  title: MarkdownBody(data: case_.nextSteps[index]),
                                 );
                               },
                             ),
@@ -401,8 +434,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
                               ElevatedButton.icon(
                                 onPressed: () {
                                   Navigator.push(
@@ -438,7 +471,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                               itemBuilder: (context, index) {
                                 return FeedbackCard(feedback: case_.feedback[index]);
                               },
-                          ),
+                            ),
                         ],
                       ),
                     ),

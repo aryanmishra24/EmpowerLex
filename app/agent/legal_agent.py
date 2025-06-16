@@ -1,16 +1,19 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from langchain.agents import AgentExecutor
 from langchain.agents import Tool, OpenAIFunctionsAgent
 from langchain_community.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import SystemMessage
+import logging
 
 from ..services.gemini_service import gemini_service
 from .tools.law_lookup import LawLookupTool
 from .tools.draft_generator import DraftGeneratorTool
 from .tools.ngo_finder import NGOFinderTool
 from .tools.next_steps import NextStepsTool
+
+logger = logging.getLogger(__name__)
 
 class LegalAgent:
     def __init__(self, openai_api_key: str = None):
@@ -92,56 +95,55 @@ class LegalAgent:
         title: str,
         description: str,
         category: str,
-        location: Optional[str] = None
-    ) -> Dict:
-        """Process a legal case and generate comprehensive response"""
-        
-        # Get Gemini analysis
-        gemini_analysis = await gemini_service.generate_legal_analysis(
-            title=title,
-            description=description,
-            category=category,
-            location=location
-        )
-        
-        # Find applicable laws
-        laws = self.law_lookup.run({
-            "query": description,
-            "category": category,
-            "location": location
-        })
-        
-        # Generate draft
-        draft = self.draft_generator.run({
-            "title": title,
-            "description": description,
-            "category": category,
-            "laws": laws,
-            "location": location
-        })
-        
-        # Find relevant NGOs
-        ngos = self.ngo_finder.run({
-            "category": category,
-            "location": location
-        })
-        
-        # Get next steps
-        steps = self.next_steps.run({
-            "category": category,
-            "case_title": title
-        })
-        
-        return {
-            "title": title,
-            "category": category,
-            "location": location,
-            "applicable_laws": laws,
-            "draft": draft,
-            "suggested_ngos": ngos,
-            "next_steps": steps,
-            "ai_analysis": gemini_analysis
-        }
+        location: str
+    ) -> Dict[str, Any]:
+        """Process a legal case and generate a comprehensive response"""
+        try:
+            # Get legal analysis from Gemini
+            analysis = await gemini_service.generate_legal_analysis(
+                title=title,
+                description=description,
+                category=category,
+                location=location
+            )
+            
+            # Get applicable laws
+            laws = self.law_lookup.run({
+                "query": description,
+                "category": category,
+                "location": location
+            })
+            
+            # Generate draft
+            draft = await self.draft_generator.run({
+                "title": title,
+                "description": description,
+                "category": category,
+                "laws": laws,
+                "location": location
+            })
+            
+            # Find relevant NGOs
+            ngos = self.ngo_finder.run(category)
+            
+            # Get next steps
+            next_steps = await self.next_steps.run({
+                "title": title,
+                "description": description,
+                "category": category,
+                "location": location
+            })
+            
+            return {
+                "draft": draft,
+                "applicable_laws": laws,
+                "suggested_ngos": ngos,
+                "next_steps": next_steps,
+                "analysis": analysis
+            }
+        except Exception as e:
+            logger.error(f"Error processing case: {str(e)}", exc_info=True)
+            raise
     
     async def chat(self, message: str) -> str:
         """Handle chat interactions with the agent"""

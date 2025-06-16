@@ -43,11 +43,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           IconButton(
             icon: Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              final created = await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => CreateCaseScreen()),
               );
+              if (created == true) {
+                context.read<CaseProvider>().loadCases();
+              }
             },
           ),
           IconButton(
@@ -78,26 +81,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final cases = caseProvider.cases;
 
           if (cases.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'No cases found',
-                    style: Theme.of(context).textTheme.titleLarge,
+            return Column(
+              children: [
+                CaseFilter(
+                  selectedFilter: caseProvider.currentFilter,
+                  onFilterChanged: (filter) => caseProvider.setFilter(filter),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'No cases found for this filter',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => CreateCaseScreen()),
+                            );
+                          },
+                          child: Text('Create New Case'),
+                        ),
+                      ],
+                    ),
                   ),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => CreateCaseScreen()),
-                      );
-                    },
-                    child: Text('Create New Case'),
-                  ),
-                ],
-              ),
+                ),
+              ],
             );
           }
 

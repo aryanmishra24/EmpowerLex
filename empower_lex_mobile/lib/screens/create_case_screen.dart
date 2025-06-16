@@ -53,7 +53,7 @@ class _CreateCaseScreenState extends State<CreateCaseScreen> {
       });
 
       if (success && mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to create case. Please try again.')),

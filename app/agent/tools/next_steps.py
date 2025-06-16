@@ -1,71 +1,91 @@
-from typing import List
+from typing import List, Dict, Any
 from langchain.tools import BaseTool
+from ...services.gemini_service import gemini_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 class NextStepsTool(BaseTool):
     name = "next_steps"
     description = "Provide next steps and timeline for legal proceedings"
     
-    def _run(self, category: str, case_title: str) -> List[str]:
-        """Generate next steps based on case category"""
-        
-        steps_map = {
-            "consumer protection": [
-                "1. Gather all purchase receipts, warranty cards, and communication records",
-                "2. Send a legal notice to the seller/service provider (30-60 days response time)",
-                "3. If no response, file complaint with District Consumer Commission",
-                "4. Pay the prescribed court fee based on compensation claimed",
-                "5. Attend hearings as scheduled by the Commission",
-                "6. If unsatisfied with District Commission order, appeal to State Commission within 30 days"
-            ],
-            "labour law": [
-                "1. Document all evidence of unfair treatment, salary slips, and employment records",
-                "2. Approach the Labour Officer for conciliation (mandatory step)",
-                "3. If conciliation fails, file application before Labour Court/Industrial Tribunal",
-                "4. Serve notice to the employer through registered post",
-                "5. Attend conciliation proceedings and hearings",
-                "6. Appeal to High Court if necessary within prescribed time limit"
-            ],
-            "criminal law": [
-                "1. File FIR at the nearest police station immediately",
-                "2. Gather and preserve all evidence (documents, witnesses, CCTV footage)",
-                "3. Cooperate with police investigation",
-                "4. If police refuse to file FIR, approach Magistrate under Section 156(3) CrPC",
-                "5. Engage a criminal lawyer for court proceedings",
-                "6. Attend all court hearings and provide testimony when required"
-            ],
-            "family law": [
-                "1. Attempt mediation/counseling through family court or counselors",
-                "2. Gather relevant documents (marriage certificate, income proof, property papers)",
-                "3. File petition in appropriate Family Court",
-                "4. Serve notice to the other party",
-                "5. Attend court-ordered mediation sessions",
-                "6. Proceed with trial if mediation fails, present evidence and witnesses"
-            ],
-            "property law": [
-                "1. Verify property documents and title clearance",
-                "2. Send legal notice to the defaulting party",
-                "3. File suit for specific performance or damages in Civil Court",
-                "4. Apply for temporary injunction if necessary",
-                "5. Complete court-ordered procedures (survey, valuation, etc.)",
-                "6. Attend trial proceedings and present documentary evidence"
-            ],
-            "civil law": [
-                "1. Send legal notice to the opposite party (mandatory in most cases)",
-                "2. Wait for 30-60 days for response to legal notice",
-                "3. File civil suit in appropriate court with jurisdiction",
-                "4. Pay court fee and process fee for service of summons",
-                "5. Attend case management hearings and pre-trial conferences",
-                "6. Present evidence, examine witnesses during trial"
-            ]
-        }
-        
-        category_lower = category.lower()
-        for step_category, steps in steps_map.items():
-            if step_category in category_lower:
-                return steps
-        
-        # Default steps for general cases
-        return steps_map["civil law"]
+    async def _run(self, *args, **kwargs) -> List[str]:
+        """Generate next steps based on case details"""
+        try:
+            # Handle both dictionary and individual arguments
+            if len(args) == 1 and isinstance(args[0], dict):
+                case = args[0]
+            else:
+                case = {
+                    "category": kwargs.get("category", ""),
+                    "case_title": kwargs.get("case_title", ""),
+                    "description": kwargs.get("description", ""),
+                    "location": kwargs.get("location", "")
+                }
+            
+            # Get legal analysis and next steps from Gemini
+            analysis = await gemini_service.generate_legal_analysis(
+                title=case.get("case_title", ""),
+                description=case.get("description", ""),
+                category=case.get("category", ""),
+                location=case.get("location", "")
+            )
+            
+            # Generate structured next steps using Gemini, tailored for Indian context and Markdown formatting
+            prompt = f"""Based on the following case details, generate a structured list of next steps with specific actions and timelines, tailored for the Indian legal and social context:
+
+Title: {case.get('case_title', '')}
+Description: {case.get('description', '')}
+Category: {case.get('category', '')}
+Location: {case.get('location', '')}
+
+Legal Analysis: {analysis}
+
+Please provide:
+1. Immediate safety measures (mention Indian emergency number 112, local police, and FIR process)
+2. Legal documentation requirements (reference Indian laws and procedures)
+3. Legal protection options (such as Protection Orders, approaching Magistrate, etc.)
+4. Support services and organizations (Indian NGOs, NALSA, helplines, etc.)
+5. Ongoing safety measures (culturally relevant)
+6. Legal proceedings timeline (Indian court process)
+
+Format the output using Markdown for bold, italics, and lists. Use clear line breaks between steps and actions."""
+
+            next_steps = await gemini_service.generate_content(prompt)
+            
+            # Convert the response into a list of strings
+            steps = []
+            if next_steps:
+                # Split by newlines and filter out empty lines
+                steps = [step.strip() for step in next_steps.split('\n') if step.strip()]
+            
+            return steps
+            
+        except Exception as e:
+            logger.error(f"Error generating next steps: {str(e)}", exc_info=True)
+            return [f"Error generating next steps: {str(e)}"]
     
-    async def _arun(self, category: str, case_title: str) -> List[str]:
-        return self._run(category, case_title)
+    async def _arun(self, case: Dict[str, Any]) -> Dict[str, Any]:
+        """Async implementation of the tool"""
+        try:
+            # Get next steps
+            next_steps = await self._run(case)
+            
+            # Get legal analysis
+            analysis = await gemini_service.generate_legal_analysis(
+                title=case.get('title', ''),
+                description=case.get('description', ''),
+                category=case.get('category', ''),
+                location=case.get('location', '')
+            )
+            
+            return {
+                'next_steps': next_steps,
+                'analysis': analysis
+            }
+        except Exception as e:
+            logger.error(f"Error in async execution: {str(e)}", exc_info=True)
+            return {
+                'next_steps': [f"Error generating next steps: {str(e)}"],
+                'analysis': "Error generating analysis"
+            }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../providers/case_provider.dart';
 
 class NextStepsScreen extends StatefulWidget {
@@ -108,7 +109,7 @@ class _NextStepsScreenState extends State<NextStepsScreen> {
                         leading: CircleAvatar(
                           child: Text('${index + 1}'),
                         ),
-                        title: Text(_steps[index]),
+                        title: MarkdownBody(data: _steps[index]),
                         trailing: IconButton(
                           icon: Icon(Icons.delete),
                           onPressed: () => _removeStep(index),

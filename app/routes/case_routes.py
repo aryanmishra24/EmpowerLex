@@ -52,6 +52,13 @@ async def create_case(
             location=current_user.location
         )
         
+        # Ensure next_steps is properly awaited and serializable
+        next_steps = agent_response.get("next_steps", [])
+        if isinstance(next_steps, list):
+            next_steps_json = json.dumps(next_steps)
+        else:
+            next_steps_json = json.dumps([str(next_steps)])
+        
         # Create case in database
         case_id = str(uuid.uuid4())
         db_case = Case(
@@ -64,16 +71,18 @@ async def create_case(
             generated_draft=agent_response["draft"],
             applicable_laws=json.dumps(agent_response["applicable_laws"]),
             suggested_ngos=json.dumps(agent_response["suggested_ngos"]),
-            next_steps=json.dumps(agent_response["next_steps"])
+            next_steps=next_steps_json
         )
         
         db.add(db_case)
         db.commit()
         db.refresh(db_case)
+        
         # Deserialize JSON fields for response
         db_case.applicable_laws = json.loads(db_case.applicable_laws) if db_case.applicable_laws else []
         db_case.suggested_ngos = json.loads(db_case.suggested_ngos) if db_case.suggested_ngos else []
         db_case.next_steps = json.loads(db_case.next_steps) if db_case.next_steps else []
+        
         return db_case
     except Exception as e:
         logger.error(f"Error creating case: {str(e)}", exc_info=True)
@@ -136,22 +145,56 @@ async def list_cases(
     current_user: UserResponse = Depends(get_current_active_user),
     db: Session = Depends(get_db),
     skip: int = 0,
-    limit: int = 10
+    limit: Optional[int] = None
 ):
     """List all cases for the current user"""
-    cases = db.query(Case).filter(
-        Case.user_id == current_user.id
-    ).offset(skip).limit(limit).all()
-    # Deserialize JSON fields for each case
-    for case in cases:
-        case.applicable_laws = json.loads(case.applicable_laws) if case.applicable_laws else []
-        case.suggested_ngos = json.loads(case.suggested_ngos) if case.suggested_ngos else []
-        case.next_steps = json.loads(case.next_steps) if case.next_steps else []
-        # Ensure case_id is set
-        if not case.case_id:
-            case.case_id = str(uuid.uuid4())
-            db.commit()
-    return cases
+    try:
+        query = db.query(Case).filter(Case.user_id == current_user.id)
+        if limit is not None:
+            query = query.offset(skip).limit(limit)
+        cases = query.all()
+        
+        # Deserialize JSON fields for each case
+        for case in cases:
+            # Ensure case_id is set
+            if not case.case_id:
+                case.case_id = str(uuid.uuid4())
+                db.commit()
+            
+            # Deserialize JSON fields
+            case.applicable_laws = json.loads(case.applicable_laws) if case.applicable_laws else []
+            case.suggested_ngos = json.loads(case.suggested_ngos) if case.suggested_ngos else []
+            
+            # Handle next_steps - ensure it's a list of strings
+            if case.next_steps:
+                try:
+                    next_steps = json.loads(case.next_steps)
+                    if isinstance(next_steps, list):
+                        # If it's a list of objects, extract the step and actions
+                        formatted_steps = []
+                        for step in next_steps:
+                            if isinstance(step, dict):
+                                if 'step' in step:
+                                    formatted_steps.append(step['step'])
+                                if 'actions' in step and isinstance(step['actions'], list):
+                                    formatted_steps.extend(step['actions'])
+                            elif isinstance(step, str):
+                                formatted_steps.append(step)
+                        case.next_steps = formatted_steps
+                    else:
+                        case.next_steps = []
+                except json.JSONDecodeError:
+                    case.next_steps = []
+            else:
+                case.next_steps = []
+        
+        return cases
+    except Exception as e:
+        logger.error(f"Error listing cases: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error listing cases: {str(e)}"
+        )
 
 @router.post("/{case_id}/feedback", response_model=FeedbackResponse)
 async def create_feedback(
