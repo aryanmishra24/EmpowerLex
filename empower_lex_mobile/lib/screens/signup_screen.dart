@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
+import 'dashboard_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   @override
@@ -34,16 +35,39 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final success = await context.read<UserProvider>().signup({
+      final credentials = {
         'username': _usernameController.text,
         'email': _emailController.text,
         'password': _passwordController.text,
         'full_name': _fullNameController.text,
         'location': _locationController.text,
         'phone': _phoneController.text,
-      });
+      };
+      final success = await context.read<UserProvider>().signup(credentials);
 
-      if (!success && mounted) {
+      if (success && mounted) {
+        // Attempt login
+        final loginSuccess = await context.read<UserProvider>().login(
+          credentials['username']!,
+          credentials['password']!,
+        );
+
+        if (loginSuccess && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Signup successful! You are now logged in.')),
+          );
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => DashboardScreen()),
+            (route) => false,
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Signup succeeded, but login failed. Please try logging in.')),
+          );
+          Navigator.of(context).pop(); // Go back to login screen
+        }
+      } else if (!success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Signup failed. Please try again.')),
         );
