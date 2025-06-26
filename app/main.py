@@ -9,6 +9,7 @@ from app.config import settings
 from app.database import engine, Base
 from app.routes.case_routes import router as case_router
 from app.auth.routes import router as auth_router
+print(f"Using database: {settings.database_url}")
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)

@@ -52,6 +52,9 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        # PostgreSQL specific options
+        compare_type=True,
+        compare_server_default=True,
     )
 
     with context.begin_transaction():
@@ -67,6 +70,12 @@ def run_migrations_online() -> None:
     """
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = settings.database_url
+    
+    # Add PostgreSQL-specific configuration
+    if settings.database_url.startswith("postgresql"):
+        configuration["sqlalchemy.pool_pre_ping"] = "true"
+        configuration["sqlalchemy.pool_recycle"] = "3600"
+    
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",
@@ -75,7 +84,13 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            # PostgreSQL specific options
+            compare_type=True,
+            compare_server_default=True,
+            # Include all tables in autogenerate
+            include_schemas=True,
         )
 
         with context.begin_transaction():

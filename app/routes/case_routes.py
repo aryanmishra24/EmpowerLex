@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
 from pydantic import BaseModel
-import json
 import uuid
 
 from ..models.case_schema import (
@@ -52,15 +51,8 @@ async def create_case(
             location=current_user.location
         )
         
-        # Ensure next_steps is properly awaited and serializable
-        next_steps = agent_response.get("next_steps", [])
-        if isinstance(next_steps, list):
-            next_steps_json = json.dumps(next_steps)
-        else:
-            next_steps_json = json.dumps([str(next_steps)])
-        
         # Create case in database
-        case_id = str(uuid.uuid4())
+        case_id = uuid.uuid4()
         db_case = Case(
             case_id=case_id,
             title=case.title,
@@ -69,19 +61,14 @@ async def create_case(
             status="pending",
             user_id=current_user.id,
             generated_draft=agent_response["draft"],
-            applicable_laws=json.dumps(agent_response["applicable_laws"]),
-            suggested_ngos=json.dumps(agent_response["suggested_ngos"]),
-            next_steps=next_steps_json
+            applicable_laws=agent_response["applicable_laws"],
+            suggested_ngos=agent_response["suggested_ngos"],
+            next_steps=agent_response["next_steps"]
         )
         
         db.add(db_case)
         db.commit()
         db.refresh(db_case)
-        
-        # Deserialize JSON fields for response
-        db_case.applicable_laws = json.loads(db_case.applicable_laws) if db_case.applicable_laws else []
-        db_case.suggested_ngos = json.loads(db_case.suggested_ngos) if db_case.suggested_ngos else []
-        db_case.next_steps = json.loads(db_case.next_steps) if db_case.next_steps else []
         
         return db_case
     except Exception as e:
@@ -100,7 +87,7 @@ async def generate_case(
         category=request.category,
         location=request.location or current_user.location
     )
-    generated_case_id = str(uuid.uuid4())
+    generated_case_id = uuid.uuid4()
     return GenerateCaseResponse(
         case_id=generated_case_id,
         title=request.title,
@@ -118,8 +105,16 @@ async def get_case(
     db: Session = Depends(get_db)
 ):
     """Get a specific case by ID"""
+    try:
+        case_uuid = uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid case ID format"
+        )
+    
     case = db.query(Case).filter(
-        Case.case_id == case_id,
+        Case.case_id == case_uuid,
         Case.user_id == current_user.id
     ).first()
     
@@ -128,16 +123,9 @@ async def get_case(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Case not found"
         )
-    # Ensure case_id is set
-    if not case.case_id:
-        case.case_id = str(uuid.uuid4())
-        db.commit()
-    # Deserialize JSON fields
-    case.applicable_laws = json.loads(case.applicable_laws) if case.applicable_laws else []
-    case.suggested_ngos = json.loads(case.suggested_ngos) if case.suggested_ngos else []
-    case.next_steps = json.loads(case.next_steps) if case.next_steps else []
+    
     # Get feedback for the case
-    case.feedback = db.query(Feedback).filter(Feedback.case_id == case_id).all()
+    case.feedback = db.query(Feedback).filter(Feedback.case_id == case_uuid).all()
     return case
 
 @router.get("/", response_model=List[CaseResponse])
@@ -154,39 +142,9 @@ async def list_cases(
             query = query.offset(skip).limit(limit)
         cases = query.all()
         
-        # Deserialize JSON fields for each case
+        # Get feedback for each case
         for case in cases:
-            # Ensure case_id is set
-            if not case.case_id:
-                case.case_id = str(uuid.uuid4())
-                db.commit()
-            
-            # Deserialize JSON fields
-            case.applicable_laws = json.loads(case.applicable_laws) if case.applicable_laws else []
-            case.suggested_ngos = json.loads(case.suggested_ngos) if case.suggested_ngos else []
-            
-            # Handle next_steps - ensure it's a list of strings
-            if case.next_steps:
-                try:
-                    next_steps = json.loads(case.next_steps)
-                    if isinstance(next_steps, list):
-                        # If it's a list of objects, extract the step and actions
-                        formatted_steps = []
-                        for step in next_steps:
-                            if isinstance(step, dict):
-                                if 'step' in step:
-                                    formatted_steps.append(step['step'])
-                                if 'actions' in step and isinstance(step['actions'], list):
-                                    formatted_steps.extend(step['actions'])
-                            elif isinstance(step, str):
-                                formatted_steps.append(step)
-                        case.next_steps = formatted_steps
-                    else:
-                        case.next_steps = []
-                except json.JSONDecodeError:
-                    case.next_steps = []
-            else:
-                case.next_steps = []
+            case.feedback = db.query(Feedback).filter(Feedback.case_id == case.case_id).all()
         
         return cases
     except Exception as e:
@@ -204,8 +162,17 @@ async def create_feedback(
     db: Session = Depends(get_db)
 ):
     """Create feedback for a case"""
+    try:
+        case_uuid = uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid case ID format"
+        )
+    
+    # Verify case exists and belongs to user
     case = db.query(Case).filter(
-        Case.case_id == case_id,
+        Case.case_id == case_uuid,
         Case.user_id == current_user.id
     ).first()
     
@@ -215,9 +182,9 @@ async def create_feedback(
             detail="Case not found"
         )
     
+    # Create feedback
     db_feedback = Feedback(
-        user_id=current_user.id,
-        case_id=case_id,
+        case_id=case_uuid,
         rating=feedback.rating,
         comments=feedback.comments
     )
@@ -234,8 +201,12 @@ async def chat_with_agent(
     current_user: UserResponse = Depends(get_current_active_user)
 ):
     """Chat with the legal agent"""
-    response = await legal_agent.chat(request.message)
-    return {"response": response} 
+    try:
+        response = await legal_agent.chat(request.message)
+        return {"response": response}
+    except Exception as e:
+        logger.error(f"Error in chat: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error processing chat request")
 
 @router.patch("/{case_id}", response_model=CaseResponse)
 async def update_case_status(
@@ -245,8 +216,16 @@ async def update_case_status(
     db: Session = Depends(get_db)
 ):
     """Update case status"""
+    try:
+        case_uuid = uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid case ID format"
+        )
+    
     case = db.query(Case).filter(
-        Case.case_id == case_id,
+        Case.case_id == case_uuid,
         Case.user_id == current_user.id
     ).first()
     
@@ -257,18 +236,17 @@ async def update_case_status(
         )
     
     # Update status
-    case.status = status_update.get("status", case.status)
+    if "status" in status_update:
+        case.status = status_update["status"]
+    
+    if "priority" in status_update:
+        case.priority = status_update["priority"]
+    
     db.commit()
     db.refresh(case)
     
-    # Deserialize JSON fields
-    case.applicable_laws = json.loads(case.applicable_laws) if case.applicable_laws else []
-    case.suggested_ngos = json.loads(case.suggested_ngos) if case.suggested_ngos else []
-    case.next_steps = json.loads(case.next_steps) if case.next_steps else []
-    
     return case
 
-# Next steps endpoints
 @router.get("/{case_id}/next-steps")
 async def get_next_steps(
     case_id: str,
@@ -277,36 +255,28 @@ async def get_next_steps(
 ):
     """Get next steps for a case"""
     try:
-        case = db.query(Case).filter(
-            Case.case_id == case_id,
-            Case.user_id == current_user.id
-        ).first()
-        
-        if not case:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Case not found"
-            )
-        
-        # Handle None or empty next_steps
-        if not case.next_steps:
-            return {"steps": []}
-        
-        try:
-            next_steps = json.loads(case.next_steps)
-            if not isinstance(next_steps, list):
-                next_steps = []
-            return {"steps": next_steps}
-        except json.JSONDecodeError:
-            logger.error(f"Error decoding next steps for case {case_id}")
-            return {"steps": []}
-            
-    except Exception as e:
-        logger.error(f"Error getting next steps: {str(e)}", exc_info=True)
+        case_uuid = uuid.UUID(case_id)
+    except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting next steps: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid case ID format"
         )
+    
+    case = db.query(Case).filter(
+        Case.case_id == case_uuid,
+        Case.user_id == current_user.id
+    ).first()
+    
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Case not found"
+        )
+    
+    return {
+        "case_id": str(case.case_id),
+        "next_steps": case.next_steps or []
+    }
 
 @router.post("/{case_id}/next-steps")
 async def update_next_steps(
@@ -317,46 +287,34 @@ async def update_next_steps(
 ):
     """Update next steps for a case"""
     try:
-        case = db.query(Case).filter(
-            Case.case_id == case_id,
-            Case.user_id == current_user.id
-        ).first()
-        
-        if not case:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Case not found"
-            )
-        
-        # Validate steps
-        steps = steps_update.get("steps", [])
-        if not isinstance(steps, list):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Steps must be a list"
-            )
-        
-        # Update next steps
-        case.next_steps = json.dumps(steps)
+        case_uuid = uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid case ID format"
+        )
+    
+    case = db.query(Case).filter(
+        Case.case_id == case_uuid,
+        Case.user_id == current_user.id
+    ).first()
+    
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Case not found"
+        )
+    
+    if "next_steps" in steps_update:
+        case.next_steps = steps_update["next_steps"]
         db.commit()
         db.refresh(case)
-        
-        # Return updated steps
-        try:
-            return {"steps": json.loads(case.next_steps)}
-        except json.JSONDecodeError:
-            return {"steps": []}
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating next steps: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating next steps: {str(e)}"
-        )
+    
+    return {
+        "case_id": str(case.case_id),
+        "next_steps": case.next_steps or []
+    }
 
-# NGO finder endpoints
 @router.get("/ngos/search")
 async def search_ngos(
     query: str,
@@ -365,60 +323,13 @@ async def search_ngos(
     current_user: UserResponse = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Search NGOs by query, category, and/or location"""
-    # Get all NGOs from the mock database
-    all_ngos = []
-    
-    # Map frontend categories to backend categories
-    category_mapping = {
-        "Legal Aid": ["consumer protection", "labour law", "family law", "criminal law", "property law"],
-        "Women Rights": ["family law"],
-        "Child Rights": ["family law"],
-        "Human Rights": ["criminal law"]
-    }
-    
-    # Map frontend locations to backend locations
-    location_mapping = {
-        "Delhi": ["New Delhi", "Delhi"],
-        "Mumbai": ["Mumbai"],
-        "Bangalore": ["Bangalore"],
-        "Chennai": ["Chennai"],
-        "Kolkata": ["Kolkata"]
-    }
-    
-    # If category is specified, get NGOs from mapped categories
-    if category and category != "All":
-        categories = category_mapping.get(category, [])
-        for cat in categories:
-            ngos = ngo_finder._run(cat)
-            all_ngos.extend(ngos)
-    else:
-        # Get NGOs from all categories
-        for cat in ["consumer protection", "labour law", "family law", "criminal law", "property law"]:
-            ngos = ngo_finder._run(cat)
-            all_ngos.extend(ngos)
-    
-    # Filter NGOs by query and location
-    filtered_ngos = []
-    for ngo in all_ngos:
-        matches_query = not query or (
-            query.lower() in ngo['name'].lower() or 
-            any(query.lower() in service.lower() for service in ngo['services'])
-        )
-        
-        # Check location match
-        matches_location = True
-        if location and location != "All":
-            location_keywords = location_mapping.get(location, [location])
-            matches_location = any(
-                keyword.lower() in ngo['address'].lower() 
-                for keyword in location_keywords
-            )
-        
-        if matches_query and matches_location:
-            filtered_ngos.append(ngo)
-    
-    return filtered_ngos
+    """Search for NGOs"""
+    try:
+        ngos = ngo_finder.search_ngos(query, category, location)
+        return {"ngos": ngos}
+    except Exception as e:
+        logger.error(f"Error searching NGOs: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error searching NGOs")
 
 @router.get("/ngos/category/{category}")
 async def get_ngos_by_category(
@@ -427,41 +338,13 @@ async def get_ngos_by_category(
     current_user: UserResponse = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get NGOs by category and optionally by location"""
-    # Map frontend categories to backend categories
-    category_mapping = {
-        "Legal Aid": ["consumer protection", "labour law", "family law", "criminal law", "property law"],
-        "Women Rights": ["family law"],
-        "Child Rights": ["family law"],
-        "Human Rights": ["criminal law"]
-    }
-    
-    # Map frontend locations to backend locations
-    location_mapping = {
-        "Delhi": ["New Delhi", "Delhi"],
-        "Mumbai": ["Mumbai"],
-        "Bangalore": ["Bangalore"],
-        "Chennai": ["Chennai"],
-        "Kolkata": ["Kolkata"]
-    }
-    
-    # Get NGOs for the specified category
-    categories = category_mapping.get(category, [])
-    
-    all_ngos = []
-    for cat in categories:
-        ngos = ngo_finder._run(cat)
-        all_ngos.extend(ngos)
-    
-    # Filter by location if specified
-    if location and location != "All":
-        location_keywords = location_mapping.get(location, [location])
-        all_ngos = [
-            ngo for ngo in all_ngos 
-            if any(keyword.lower() in ngo['address'].lower() for keyword in location_keywords)
-        ]
-    
-    return all_ngos
+    """Get NGOs by category"""
+    try:
+        ngos = ngo_finder.get_ngos_by_category(category, location)
+        return {"ngos": ngos}
+    except Exception as e:
+        logger.error(f"Error getting NGOs by category: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error getting NGOs by category")
 
 @router.get("/ngos/location/{location}")
 async def get_ngos_by_location(
@@ -470,43 +353,10 @@ async def get_ngos_by_location(
     current_user: UserResponse = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get NGOs by location and optionally by category"""
-    # Get all NGOs from the mock database
-    all_ngos = []
-    
-    # Map frontend categories to backend categories
-    category_mapping = {
-        "Legal Aid": ["consumer protection", "labour law", "family law", "criminal law", "property law"],
-        "Women Rights": ["family law"],
-        "Child Rights": ["family law"],
-        "Human Rights": ["criminal law"]
-    }
-    
-    # Map frontend locations to backend locations
-    location_mapping = {
-        "Delhi": ["New Delhi", "Delhi"],
-        "Mumbai": ["Mumbai"],
-        "Bangalore": ["Bangalore"],
-        "Chennai": ["Chennai"],
-        "Kolkata": ["Kolkata"]
-    }
-    
-    # If category is specified, get NGOs from mapped categories
-    if category and category != "All":
-        categories = category_mapping.get(category, [])
-        for cat in categories:
-            ngos = ngo_finder._run(cat)
-            all_ngos.extend(ngos)
-    else:
-        # Get NGOs from all categories
-        for cat in ["consumer protection", "labour law", "family law", "criminal law", "property law"]:
-            ngos = ngo_finder._run(cat)
-            all_ngos.extend(ngos)
-    
-    # Filter NGOs by location
-    location_keywords = location_mapping.get(location, [location])
-    filtered_ngos = [
-        ngo for ngo in all_ngos 
-        if any(keyword.lower() in ngo['address'].lower() for keyword in location_keywords)
-    ]
-    return filtered_ngos 
+    """Get NGOs by location"""
+    try:
+        ngos = ngo_finder.get_ngos_by_location(location, category)
+        return {"ngos": ngos}
+    except Exception as e:
+        logger.error(f"Error getting NGOs by location: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error getting NGOs by location") 

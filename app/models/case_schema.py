@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from uuid import UUID
 
 class CaseBase(BaseModel):
     title: str
@@ -12,7 +13,7 @@ class CaseCreate(CaseBase):
     pass
 
 class FeedbackCreate(BaseModel):
-    case_id: str
+    case_id: UUID
     rating: int  # 1-5
     comments: Optional[str] = None
 
@@ -26,7 +27,7 @@ class FeedbackResponse(BaseModel):
 
 class CaseResponse(CaseBase):
     id: int
-    case_id: str
+    case_id: UUID
     status: str
     generated_draft: Optional[str] = None
     applicable_laws: Optional[List[Dict[str, Any]]] = None
@@ -52,7 +53,7 @@ class GenerateCaseRequest(BaseModel):
     location: Optional[str] = None
 
 class GenerateCaseResponse(BaseModel):
-    case_id: str
+    case_id: UUID
     title: str
     category: str
     draft: str
