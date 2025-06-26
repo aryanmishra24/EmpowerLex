@@ -11,6 +11,7 @@ from app.routes.case_routes import router as case_router
 from app.auth.routes import router as auth_router
 print(f"Using database: {settings.database_url}")
 
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,10 @@ async def root():
         "version": "1.0.0",
         "docs_url": "/docs"
     }
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
+
 
 @app.get("/health")
 async def health_check():

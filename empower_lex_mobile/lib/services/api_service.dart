@@ -10,7 +10,7 @@ class ApiService {
   final FlutterSecureStorage storage;
 
   ApiService({
-    this.baseUrl = 'http://localhost:8000', // Local development server
+    this.baseUrl = 'https://empowerlex-7gjc.onrender.com', // Production server
     FlutterSecureStorage? storage,
   }) : storage = storage ?? const FlutterSecureStorage();
 

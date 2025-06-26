@@ -131,7 +131,7 @@ empower_lex/
 For development, you can use SQLite:
 ```bash
 export DATABASE_URL="sqlite:///./app.db"
-```
+     ```
 
 ### Running the Application
 
@@ -148,8 +148,8 @@ export DATABASE_URL="sqlite:///./app.db"
    ```
 
 3. Access the API documentation:
-   - Swagger UI: http://localhost:8000/docs
-   - ReDoc: http://localhost:8000/redoc
+   - Swagger UI: https://empowerlex-7gjc.onrender.com/docs
+   - ReDoc: https://empowerlex-7gjc.onrender.com/redoc
 
 ## AI Features
 
