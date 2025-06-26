@@ -16,7 +16,7 @@ EmpowerLex is a legal empowerment platform that helps users navigate the legal s
 
 - **Frontend**: Flutter
 - **Backend**: Python (FastAPI)
-- **Database**: PostgreSQL
+- **Database**: PostgreSQL (production) / SQLite (development)
 - **Authentication**: JWT
 - **API**: RESTful
 - **AI/ML**: 
@@ -49,7 +49,7 @@ empower_lex/
 
 - Flutter SDK
 - Python 3.8+
-- PostgreSQL
+- PostgreSQL (for production)
 - Node.js (for development tools)
 
 ### Installation
@@ -74,13 +74,64 @@ empower_lex/
    flutter pub get
    ```
 
-4. Configure API Keys:
+4. Configure Environment Variables:
    - Create a `.env` file in the root directory
-   - Add your API keys:
+   - Add your configuration:
      ```bash
+     # Database Configuration
+     DATABASE_URL=postgresql://username:password@localhost:5432/empowerlex
+     # OR for SQLite development:
+     # DATABASE_URL=sqlite:///./app.db
+     
+     # PostgreSQL specific settings (optional)
+     POSTGRES_HOST=localhost
+     POSTGRES_PORT=5432
+     POSTGRES_USER=empowerlex
+     POSTGRES_PASSWORD=your_password
+     POSTGRES_DB=empowerlex
+     
+     # API Keys
      GEMINI_API_KEY=your_gemini_api_key_here
      OPENAI_API_KEY=your_openai_api_key_here
+     
+     # JWT Settings
+     SECRET_KEY=your-secret-key-change-in-production
      ```
+
+### Database Setup
+
+#### PostgreSQL (Recommended for Production)
+
+1. Install PostgreSQL:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install postgresql postgresql-contrib
+   
+   # macOS
+   brew install postgresql
+   
+   # Windows
+   # Download from https://www.postgresql.org/download/windows/
+   ```
+
+2. Create database and user:
+   ```sql
+   CREATE DATABASE empowerlex;
+   CREATE USER empowerlex WITH PASSWORD 'your_password';
+   GRANT ALL PRIVILEGES ON DATABASE empowerlex TO empowerlex;
+   ```
+
+3. Set environment variable:
+   ```bash
+   export DATABASE_URL="postgresql://empowerlex:your_password@localhost:5432/empowerlex"
+   ```
+
+#### SQLite (Development)
+
+For development, you can use SQLite:
+```bash
+export DATABASE_URL="sqlite:///./app.db"
+```
 
 ### Running the Application
 
@@ -96,6 +147,10 @@ empower_lex/
    flutter run
    ```
 
+3. Access the API documentation:
+   - Swagger UI: http://localhost:8000/docs
+   - ReDoc: http://localhost:8000/redoc
+
 ## AI Features
 
 The platform leverages advanced AI capabilities through:
@@ -104,6 +159,27 @@ The platform leverages advanced AI capabilities through:
 2. **OpenAI Integration**: For natural language processing and document generation
 3. **Custom AI Agent**: A specialized agent for handling legal queries and document generation
 4. **Smart Document Analysis**: AI-powered analysis of legal documents and case files
+
+## Database Management
+
+### Migrations
+
+The project uses Alembic for database migrations:
+
+```bash
+# Create a new migration
+alembic revision --autogenerate -m "Description of changes"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback migrations
+alembic downgrade -1
+```
+
+### Database Connection Testing
+
+You can test your database connection by checking the application logs. When using PostgreSQL, you'll see connection pool settings and PostgreSQL-specific queries.
 
 ## Deployment
 

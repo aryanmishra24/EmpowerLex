@@ -29,6 +29,26 @@ android/app/release
 .env.*.local
 config.py
 
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.ENV/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+app.db
+
 # Generated files
 *.g.dart
 *.freezed.dart
